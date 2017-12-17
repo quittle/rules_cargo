@@ -65,6 +65,7 @@ def _get_features(crate_name, crate_version, crates):
 def _cargo_repository_impl(ctx):
     print("starting cargo repository")
 
+    java = ctx.path(ctx.attr._java_bin)
     python = ctx.which("python")
 
     index_repository_root = "{name}_index_repo".format(name=ctx.attr.name)
@@ -75,13 +76,15 @@ def _cargo_repository_impl(ctx):
     # Convert crate to crate path (? Probably in script)
 
     cargo_dependency_resolver = str(ctx.path(ctx.attr._cargo_dependency_resolver))
+    java_cargo_dependency_resolver = str(ctx.path(ctx.attr._java_cargo_dependency_resolver))
+
 
     # cargo_dependency resolver for crates -> crate_namve-1.2.3  ["dep_1-0.0.1", "dep_2-1.2.3"] dep_1-0.0.1 []
-    result = ctx.execute([python, cargo_dependency_resolver, ctx.attr.crate, ctx.attr.version, index_repository_root], quiet=False)
+    #
+    # result = ctx.execute([python, cargo_dependency_resolver, ctx.attr.crate, ctx.attr.version, index_repository_root], quiet=False)
+    result = ctx.execute([java, "-jar", java_cargo_dependency_resolver, ctx.attr.crate, ctx.attr.version, index_repository_root], quiet=False)
     if result.return_code != 0:
         fail("Unable to resolve cargo dependencies", result.stderr)
-
-    print(result.stdout)
 
     crates = []
     for line in result.stdout.split('\n'):
@@ -133,16 +136,35 @@ def _cargo_repository_impl(ctx):
         # This is the root folder of all crates so this is assumed "by convention"
         expanded_loc = "{name}-{version}".format(name=crate.name, version=crate.version)
 
+        # print(expanded_loc + " --- " + crate.name)
+
         crate_root_finder = str(ctx.path(ctx.attr._crate_root_finder))
         ret = ctx.execute([python, crate_root_finder, expanded_loc, crate.name], quiet=False)
 
         if ret.return_code != 0:
+            continue # TODO remove
             fail("Could not find the root of crate " + crate.name, str(ret.return_code))
 
-        crate_root = ret.stdout.strip("\n\r\t ")
-        crate_features = _get_features(crate.name, crate.version, crates)
+        print("crate_root_finder: " + ret.stdout)
 
-        print("Crateroot: " + crate_root)
+        crate_root = None
+        crate_features = []
+        for line in ret.stdout.split("\n"):
+            line = line.strip()
+            path_prefix = 'path '
+            features_prefix = 'features '
+            if line.startswith(path_prefix):
+                crate_root = line[len(path_prefix):].strip()
+            if line.startswith(features_prefix):
+                crate_features = line[len(features_prefix):].strip().split(' ')
+
+        # TODO: Remove this check as it shouldn't be necesary
+        if _get_features(crate.name, crate.version, crates) != None:
+            crate_features.extend(_get_features(crate.name, crate.version, crates))
+
+        print("Crate: " + str(crate.name))
+        print("CR: " + str(crate_root))
+        print("CF: " + str(crate_features))
 
         ctx.file(expanded_loc + "/BUILD", """
 load("@io_bazel_rules_rust//rust:rust.bzl", "rust_library")
@@ -164,7 +186,7 @@ rust_library(
                 name=crate.name.replace('-', '_'),
                 deps=repr(["//" + name + "-" + info['version'] + ":" + name.replace('-', '_')
                         for name, info in crate.deps.items()]),
-                crate_root='":{crate_root}"'.format(crate_root=crate_root) if crate_root else None,
+                crate_root=repr(crate_root) if crate_root else None,
                 crate_features=repr(crate_features) if crate_features else None,
             )
         )
@@ -216,13 +238,20 @@ _cargo_repository = repository_rule(
         "repository": attr.string(
             default = "https://github.com/rust-lang/crates.io-index",
         ),
+        "_java_bin": attr.label(
+            default = Label("@local_jdk//:bin/java"),
+        ),
         "_cargo_dependency_resolver": attr.label(
             allow_files = True,
             default = Label("//:cargo_dependency_resolver.py"),
         ),
+        "_java_cargo_dependency_resolver": attr.label(
+            allow_files = True,
+            default = Label("//:semver_test.jar"),
+        ),
         "_crate_root_finder": attr.label(
             allow_files = True,
-            default = Label("//:cargo_crate_root_finder.py"),
+            default = Label("//:cargo_crate_root_finder"),
         ),
         "sha256hashes": attr.string_dict(
             default = {} # { "time-0.1.2": "723498bj5nbjk34btbcu9hda9s0j2309rj23f9n23nv9" },

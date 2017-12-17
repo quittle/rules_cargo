@@ -1,5 +1,7 @@
 import json
 import os
+import re
+import semver
 import sys
 
 def eprint(msg):
@@ -43,6 +45,8 @@ def try_convert(v, t):
         return v
 
 def semver_compare(semver_a, semver_b):
+    # return semver.compare(semver_a, semver_b)
+
     int_split = lambda s: [try_convert(v, int) for v in s.split('.')]
     a_parts = int_split(semver_a)
     b_parts = int_split(semver_b)
@@ -113,6 +117,13 @@ def test_semver_cap():
     assert_eq(semver_cap('1.0.20'), '2.0.0')
 
 def version_match(actual, requirement):
+    # if '.' not in actual and '*' not in actual:
+    #     actual += '.0.0'
+    return semver.satisfies(actual, requirement)
+    if not re.match('[<>=!].*', requirement):
+        requirement = '== ' + requirement
+    return semver.match(actual, requirement)
+    ## SEMVER!!
     return (
         requirement == actual or
         (
@@ -144,17 +155,17 @@ def version_match(actual, requirement):
     )
 
 def test_version_match():
-    assert_true(version_match('1', '*'))
-    assert_true(version_match('2.0.3.apha1', '*'))
+    assert_true(version_match('0.0.1', '*'))
+    assert_true(version_match('2.0.3-alpha1', '*'))
     assert_true(version_match('1.0.0', '*'))
     assert_true(version_match('1.0.0', '^1'))
     assert_true(version_match('1.0.0', '^1.0'))
     assert_true(version_match('1.4', '^1.2.3'))
     assert_true(version_match('1.9.9.9', '^1.0'))
-    assert_true(version_match('1.9.9.9.extra', '^1.0'))
+    assert_true(version_match('1.9.9.9-extra', '^1.0'))
 
-    assert_false(version_match('2', '^1.0'))
-    assert_false(version_match('2.0', '^1.0'))
+    assert_false(version_match('2.0.0', '^1.0'))
+    assert_false(version_match('2.0.0', '^1'))
 
 def resolve(index, crate, requirements, dep_set=None):
     """

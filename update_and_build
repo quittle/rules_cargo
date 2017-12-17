@@ -1,0 +1,6 @@
+#!/bin/sh
+bazel build //:semver_test_deploy.jar && \
+    cp -f bazel-bin/semver_test_deploy.jar ./semver_test.jar && \
+    bazel build //:cargo_crate_root_finder.par && \
+    cp -f bazel-bin/cargo_crate_root_finder.par ./cargo_crate_root_finder && \
+    bazel build @url//url-1.6.0:url

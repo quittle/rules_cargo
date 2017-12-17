@@ -1,0 +1,46 @@
+#!/bin/bash
+
+set -e
+
+ROOT="$( cd "$(dirname "$0")" ; pwd -P )"
+CARGO_HOME="${ROOT}/cargo_home"
+
+function _cargo() {
+    CARGO_HOME="${CARGO_HOME}" "${CARGO}" $@
+}
+
+# Make sure cargo is installed
+which cargo > /dev/null || (
+    curl -sSf https://static.rust-lang.org/rustup.sh | sh
+)
+
+CARGO="$(which cargo)"
+echo "Using cargo found ${CARGO}"
+
+# Delete the old version
+# rm -rf "${CARGO_HOME}"
+
+# Output from cargo search
+#     cargo = "0.22.0"    # Cargo, a package manager for Rust.
+#     ... and 1749 crates more (use --limit N to see more)
+latest_cargo_version="$( \
+    _cargo search --quiet --limit 1 cargo | \
+    head --lines=1 | \
+    cut --delimiter='"' --field=2 \
+)"
+
+echo "Latest cargo version is ${latest_cargo_version}."
+
+_cargo install --vers="${latest_cargo_version}" cargo
+cargo_version_string=$("${CARGO_HOME}/bin/cargo" --version)
+
+if [ "$cargo_version_string" != "cargo ${latest_cargo_version}" ]; then
+    echo "Unxpected cargo version reported: \"${cargo_version_string}\""
+    exit 1
+fi
+
+echo '## Cargo update completed successfully.'
+echo '## Remember to bump the major version to reflect the cargo version'
+echo "## Cargo version: ${latest_cargo_version}"
+
+[[ 1 -eq 2 ]]

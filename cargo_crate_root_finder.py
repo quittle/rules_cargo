@@ -2,6 +2,7 @@ import json
 import os
 import re
 import sys
+import toml
 
 MEMBERS_LINE_PREFIX = 'members = '
 MEMBERS_LINE_PREFIX_LEN = len(MEMBERS_LINE_PREFIX)
@@ -35,11 +36,20 @@ def main(args):
     crate_root = args[1]
     crate = args[2]
 
-    cargo_toml = os.path.join(crate_root, 'Cargo.toml')
-    assert os.path.exists(cargo_toml)
+    cargo_toml_path = os.path.join(crate_root, 'Cargo.toml')
+    assert os.path.exists(cargo_toml_path)
 
-    with open(cargo_toml, 'r') as toml:
-        cargo_toml_contents = toml.read()
+    cargo_toml = toml.load(cargo_toml_path)
+
+    print 'path ' + cargo_toml.get('lib', {}).get('path', '')
+    features = cargo_toml.get('features', {}).get('default', [])
+    print 'features ' + ' '.join(f.strip('\r\n\t ') for f in features)
+    return
+    print(cargo_toml)
+    #
+
+    with open(cargo_toml, 'r') as f:
+        cargo_toml_contents = f.read()
 
     section_list = [s.strip() for s in re.split('(\[+.+\]+)', cargo_toml_contents) if s.strip() != '']
     sections = zip(section_list[::2], section_list[1::2])
@@ -49,15 +59,25 @@ def main(args):
     for section in section_list:
         if in_lib:
             parsed_section = parse_section(section)
+
             if 'path' in parsed_section:
-                # print 'path ' +
-                print parsed_section['path'].strip('"')
+                print 'path ' + parsed_section['path'].strip('"')
+
             in_lib = False
         elif in_features:
             parsed_section = parse_section(section)
-            if 'default' in parsed_section:
-                pass
-                # print 'features ' + ' '.join(json.loads(parsed_section['default']))
+
+            features = { 'default' }
+            final_features = set()
+            while len(features) > 0:
+                feature = features.pop()
+                if feature in parsed_section:
+                    perror('!!!' + str(crate) + " = " + str(feature) + ': ' + str(parsed_section[feature]))
+                    feature_deps = json.loads(parsed_section[feature])
+                    features.extend(feature_deps)
+                    final_features.extend(feature_deps)
+
+                print 'features ' + ' '.join(final_features)
 
             in_features = False
         if section == '[lib]':

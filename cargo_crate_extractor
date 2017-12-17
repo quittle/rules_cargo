@@ -1,0 +1,9 @@
+#!/bin/bash
+
+set -e
+
+CRATE_FILE="$0"
+DESTINATION="$1"
+
+# Extract crate
+tar -xzf "${CRATE_FILE}" -C "${DESTINATION}"
